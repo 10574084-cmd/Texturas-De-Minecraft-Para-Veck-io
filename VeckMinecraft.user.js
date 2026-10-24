@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         VeckCraft - Minecraft visual layer
+// @name         VeckCraft - First Person HUD
 // @namespace    https://github.com/10574084-cmd/Texturas-De-Minecraft-Para-Veck-io
-// @version      0.2.0
-// @description  Capa visual Minecraft a pantalla completa para Veck.io (prototipo local).
+// @version      0.3.0
+// @description  Prototipo de mano en primera persona, hotbar e inventario estilo Minecraft para Veck.io.
 // @match        https://veck.io/*
 // @match        https://www.veck.io/*
 // @run-at       document-idle
@@ -11,139 +11,136 @@
 
 (() => {
   'use strict';
-  if (window.__veckCraftLayer) return;
-  window.__veckCraftLayer = true;
+  if (window.__veckCraftFirstPerson) return;
+  window.__veckCraftFirstPerson = true;
 
-  const css = document.createElement('style');
-  css.textContent = `
-    #veckcraft-layer{position:fixed;inset:0;width:100vw;height:100vh;z-index:2147483000;pointer-events:none;image-rendering:pixelated}
-    #veckcraft-hud{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:2147483001;display:flex;gap:5px;padding:6px;background:#1717179e;border:2px solid #ddd;pointer-events:auto}
-    .veckcraft-slot{width:43px;height:43px;box-sizing:border-box;background:#555b;color:white;border:2px solid #aaa;font:22px monospace;display:grid;place-items:center;text-shadow:1px 2px #222;cursor:pointer}
-    .veckcraft-slot.active{border:3px solid white;background:#8b8b8b}
-    #veckcraft-tag{position:fixed;top:10px;left:10px;z-index:2147483001;color:white;background:#1119;border:1px solid #aaa;padding:5px 8px;font:12px monospace;pointer-events:none}
-    #veckcraft-help{position:fixed;top:10px;right:10px;z-index:2147483001;color:#fff;background:#111b;padding:7px 9px;font:11px monospace;pointer-events:auto}
+  const style = document.createElement('style');
+  style.textContent = `
+    #vcfp-canvas{position:fixed;inset:0;width:100vw;height:100vh;z-index:2147483000;pointer-events:none;image-rendering:pixelated}
+    #vcfp-label{position:fixed;top:10px;left:10px;z-index:2147483001;padding:5px 8px;color:#fff;background:#1119;border:1px solid #aaa;font:11px monospace;pointer-events:none}
+    #vcfp-hotbar{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:2147483002;display:flex;gap:3px;padding:5px;background:#171717a8;border:2px solid #ddd;pointer-events:auto}
+    .vcfp-slot{width:44px;height:44px;box-sizing:border-box;border:2px solid #888;background:#555b;color:#fff;display:flex;align-items:center;justify-content:center;position:relative;cursor:pointer;font:20px monospace}
+    .vcfp-slot.active{border:3px solid white;background:#888b;outline:1px solid #222}
+    .vcfp-slot small{position:absolute;left:2px;top:0;color:#fff;text-shadow:1px 1px #000;font:10px monospace}
+    #vcfp-inventory{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:2147483003;width:min(340px,90vw);padding:14px;background:#c6c6c6;border:3px solid #373737;box-shadow:inset 3px 3px #fff,inset -3px -3px #555;color:#222;font:13px monospace;pointer-events:auto;display:none}
+    #vcfp-inventory h3{margin:0 0 12px;font-size:15px;font-weight:normal}
+    #vcfp-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:5px}
+    .vcfp-cell{height:45px;background:#8b8b8b;border:2px solid #eee;border-right-color:#555;border-bottom-color:#555;display:grid;place-items:center;font-size:22px;cursor:pointer}
+    #vcfp-hint{margin-top:10px;font-size:10px;color:#333}
   `;
-  document.documentElement.appendChild(css);
+  document.documentElement.appendChild(style);
 
-  const layer = document.createElement('canvas');
-  layer.id = 'veckcraft-layer';
-  layer.setAttribute('aria-label','Capa visual Minecraft');
-  document.body.appendChild(layer);
-  const ctx = layer.getContext('2d');
-  const tag = document.createElement('div');
-  tag.id='veckcraft-tag';
-  tag.textContent='VECKCRAFT VISUAL 0.2 · F2 oculta/mostrar';
-  document.body.appendChild(tag);
+  const canvas = document.createElement('canvas');
+  canvas.id = 'vcfp-canvas';
+  document.body.appendChild(canvas);
+  const ctx = canvas.getContext('2d');
 
-  const help = document.createElement('div');
-  help.id='veckcraft-help';
-  help.textContent='PROTOTIPO VISUAL · solo local';
-  document.body.appendChild(help);
+  const label = document.createElement('div');
+  label.id = 'vcfp-label';
+  label.textContent = 'VECKCRAFT FP · E inventario · F2 ocultar';
+  document.body.appendChild(label);
 
-  const hud = document.createElement('div');
-  hud.id='veckcraft-hud';
-  hud.innerHTML = '<button class="veckcraft-slot active" data-kind="grass" title="Césped">🟩</button><button class="veckcraft-slot" data-kind="dirt" title="Tierra">🟫</button><button class="veckcraft-slot" data-kind="stone" title="Piedra">⬜</button><button class="veckcraft-slot" data-kind="wood" title="Madera">🟫</button><button class="veckcraft-slot" data-kind="sword" title="Espada">⚔️</button>';
-  document.body.appendChild(hud);
+  const items = [
+    {id:'grass', icon:'🟩', name:'Bloque de césped', color:'#70a848'},
+    {id:'dirt', icon:'🟫', name:'Tierra', color:'#8b603d'},
+    {id:'stone', icon:'⬜', name:'Piedra', color:'#999999'},
+    {id:'wood', icon:'🪵', name:'Madera', color:'#9b6738'},
+    {id:'pickaxe', icon:'⛏️', name:'Herramienta', color:'#7c8c92'}
+  ];
+  let selected=0, inventoryOpen=false, visible=true, phase=0, mx=0, my=0, lastX=0, lastY=0, movement=0, swing=0;
 
-  let visible=true, selected='grass', swing=0, tick=0;
-  const palette = {
-    grass:{top:'#76b94b',left:'#795239',right:'#60402b',sideTop:'#4e9638'},
-    dirt:{top:'#996841',left:'#785033',right:'#583a26'},
-    stone:{top:'#b5b5b5',left:'#858585',right:'#626262'},
-    wood:{top:'#c28a4b',left:'#94602f',right:'#69401f'},
-    brick:{top:'#b65a4d',left:'#8d4138',right:'#652b27'}
-  };
-  const placed = [];
+  const hotbar=document.createElement('div');
+  hotbar.id='vcfp-hotbar';
+  hotbar.innerHTML=items.map((it,i)=>'<button class="vcfp-slot '+(i===0?'active':'')+'" data-i="'+i+'" title="'+it.name+'"><small>'+(i+1)+'</small>'+it.icon+'</button>').join('');
+  document.body.appendChild(hotbar);
 
-  function poly(points, fill, stroke='#17171766') {
-    ctx.beginPath();ctx.moveTo(points[0][0],points[0][1]);
-    for(let i=1;i<points.length;i++)ctx.lineTo(points[i][0],points[i][1]);
-    ctx.closePath();ctx.fillStyle=fill;ctx.fill();
-    if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=1;ctx.stroke();}
+  const inv=document.createElement('div');
+  inv.id='vcfp-inventory';
+  inv.innerHTML='<h3>Inventario</h3><div id="vcfp-grid"></div><div id="vcfp-hint">Pulsa E o Escape para cerrar · Selecciona un objeto</div>';
+  inv.querySelector('#vcfp-grid').innerHTML=items.concat(items,items).map((it,i)=>'<button class="vcfp-cell" data-i="'+(i%items.length)+'" title="'+it.name+'">'+it.icon+'</button>').join('');
+  document.body.appendChild(inv);
+
+  function select(i){
+    selected=i;
+    hotbar.querySelectorAll('.vcfp-slot').forEach((b,n)=>b.classList.toggle('active',n===i));
   }
-  function cube(x,y,s,type) {
-    const p=palette[type]||palette.grass;
-    const topY=s*.48;
-    poly([[x,y],[x+s,y-topY],[x+2*s,y],[x+s,y+topY]],p.top);
-    poly([[x,y],[x+s,y+topY],[x+s,y+topY+s],[x,y+s]],p.left);
-    poly([[x+s,y+topY],[x+2*s,y],[x+2*s,y+s],[x+s,y+topY+s]],p.right);
-    // Tiny square pixels
-    ctx.fillStyle='#ffffff20';
-    ctx.fillRect(x+s*.25,y+s*.2,Math.max(2,s*.12),Math.max(2,s*.12));
-    ctx.fillRect(x+s*1.3,y+s*.18,Math.max(2,s*.1),Math.max(2,s*.1));
-  }
-  function drawSteve(x, feet, u) {
-    const bob=Math.sin(tick*.07)*u*1.3;
-    // legs and shoes
-    ctx.fillStyle='#273c83';ctx.fillRect(x-13*u,feet-31*u+bob,12*u,30*u);ctx.fillRect(x+1*u,feet-31*u-bob,12*u,30*u);
-    ctx.fillStyle='#3d342c';ctx.fillRect(x-14*u,feet-4*u,13*u,4*u);ctx.fillRect(x+u,feet-4*u,13*u,4*u);
-    // arms
-    ctx.fillStyle='#c99068';ctx.fillRect(x-22*u,feet-62*u,8*u,29*u);ctx.fillRect(x+14*u,feet-62*u,8*u,29*u);
-    // turquoise shirt/body
-    ctx.fillStyle='#247ca6';ctx.fillRect(x-14*u,feet-63*u,28*u,32*u);
-    // block head and hair
-    ctx.fillStyle='#c99068';ctx.fillRect(x-13*u,feet-85*u,26*u,23*u);
-    ctx.fillStyle='#573b25';ctx.fillRect(x-13*u,feet-88*u,26*u,7*u);ctx.fillRect(x-13*u,feet-81*u,4*u,8*u);ctx.fillRect(x+9*u,feet-81*u,4*u,6*u);
-    ctx.fillStyle='#f5f5f5';ctx.fillRect(x-9*u,feet-78*u,5*u,4*u);ctx.fillRect(x+4*u,feet-78*u,5*u,4*u);
-    ctx.fillStyle='#2e56a5';ctx.fillRect(x-7*u,feet-77*u,2.5*u,3*u);ctx.fillRect(x+6*u,feet-77*u,2.5*u,3*u);
-    ctx.fillStyle='#81503a';ctx.fillRect(x-2*u,feet-73*u,4*u,6*u);
-    // sword selected: held in right hand, purely visual
-    if(selected==='sword') {
-      ctx.save();ctx.translate(x+22*u,feet-47*u);ctx.rotate(-.6+Math.sin(swing)*.07);
-      ctx.fillStyle='#a66c3b';ctx.fillRect(-2*u,0,4*u,13*u);
-      ctx.fillStyle='#d5e5e8';ctx.fillRect(-3*u,-20*u,6*u,22*u);
-      ctx.fillStyle='#f6ffff';ctx.fillRect(-1*u,-19*u,2*u,17*u);
-      ctx.fillStyle='#8b6039';ctx.fillRect(-7*u,-2*u,14*u,3*u);
-      ctx.restore();
-    }
-  }
+  hotbar.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>select(Number(b.dataset.i))));
+  inv.querySelectorAll('.vcfp-cell').forEach(b=>b.addEventListener('click',()=>{select(Number(b.dataset.i));inventoryOpen=false;inv.style.display='none';}));
+
   function resize(){
     const dpr=Math.min(window.devicePixelRatio||1,2);
-    layer.width=Math.floor(innerWidth*dpr);layer.height=Math.floor(innerHeight*dpr);
-    layer.style.width=innerWidth+'px';layer.style.height=innerHeight+'px';
+    canvas.width=Math.floor(innerWidth*dpr);canvas.height=Math.floor(innerHeight*dpr);
+    canvas.style.width=innerWidth+'px';canvas.style.height=innerHeight+'px';
     ctx.setTransform(dpr,0,0,dpr,0,0);
   }
+  function pixelRect(x,y,w,h,color){
+    ctx.fillStyle=color;ctx.fillRect(Math.round(x),Math.round(y),Math.round(w),Math.round(h));
+  }
+  function drawBlock(x,y,s,type){
+    const palette={grass:['#79b64b','#6a452b','#52351f'],dirt:['#93663f','#7b5233','#573920'],stone:['#b5b5b5','#858585','#646464'],wood:['#b98145','#8c5b30','#604020'],pickaxe:['#8d9a9e','#5b6467','#414749']}[type]||['#79b64b','#6a452b','#52351f'];
+    ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+s,y-s*.45);ctx.lineTo(x+s*2,y);ctx.lineTo(x+s,y+s*.45);ctx.closePath();ctx.fillStyle=palette[0];ctx.fill();
+    ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+s,y+s*.45);ctx.lineTo(x+s,y+s*1.45);ctx.lineTo(x,y+s);ctx.closePath();ctx.fillStyle=palette[1];ctx.fill();
+    ctx.beginPath();ctx.moveTo(x+s,y+s*.45);ctx.lineTo(x+s*2,y);ctx.lineTo(x+s*2,y+s);ctx.lineTo(x+s,y+s*1.45);ctx.closePath();ctx.fillStyle=palette[2];ctx.fill();
+    ctx.fillStyle='#ffffff22';ctx.fillRect(x+s*.25,y+s*.2,Math.max(2,s*.15),Math.max(2,s*.15));
+  }
+  function drawHand(w,h){
+    // First-person blocky forearm and hand; it follows a small walk bob and mouse motion.
+    const scale=Math.max(.7,Math.min(1.25,h/720));
+    const bob=Math.sin(phase)*Math.min(7,2+movement*.6);
+    const sway=Math.max(-12,Math.min(12,mx*.018));
+    const x=w*.72+sway, y=h+18+bob+my*.012;
+    ctx.save();
+    ctx.translate(x,y);
+    ctx.rotate(-.12+Math.sin(phase*.5)*.018);
+    // sleeve
+    pixelRect(-4*scale,-122*scale,86*scale,108*scale,'#2777a4');
+    pixelRect(5*scale,-119*scale,67*scale,7*scale,'#398db4');
+    // skin forearm and square hand
+    pixelRect(8*scale,-55*scale,66*scale,58*scale,'#c99068');
+    pixelRect(8*scale,-55*scale,66*scale,8*scale,'#e0aa7d');
+    pixelRect(8*scale,-8*scale,66*scale,8*scale,'#a96f50');
+    // pixelated knuckle shading
+    pixelRect(18*scale,-35*scale,12*scale,9*scale,'#dba17a');
+    pixelRect(43*scale,-28*scale,15*scale,8*scale,'#b97f5d');
+    if(items[selected].id!=='pickaxe'){
+      // selected block held in front of the hand
+      drawBlock(31*scale,-190*scale,25*scale,items[selected].id);
+    } else {
+      // a simple pixel-art tool silhouette (visual placeholder)
+      ctx.save();ctx.translate(36*scale,-95*scale);ctx.rotate(-.45+Math.sin(swing)*.025);
+      pixelRect(-4*scale,-83*scale,9*scale,88*scale,'#8b6039');
+      pixelRect(-23*scale,-84*scale,47*scale,13*scale,'#7f9095');
+      pixelRect(-23*scale,-84*scale,12*scale,24*scale,'#9caaae');
+      ctx.restore();
+    }
+    ctx.restore();
+  }
   function draw(){
-    if(!visible){requestAnimationFrame(draw);return;}
     const w=innerWidth,h=innerHeight;
     ctx.clearRect(0,0,w,h);
-    // Perspective block path painted over the game view.
-    const horizon=h*.61;
-    for(let row=3;row>=0;row--){
-      for(let col=-3;col<=3;col++){
-        const s=Math.max(5,7+row*3);
-        const x=w/2+col*s*1.65-row*2;
-        const y=horizon+row*s*.85+Math.abs(col)*s*.16;
-        if(y<h-80) cube(x,y,s, row===0?'grass':(row%2?'dirt':'grass'));
-      }
+    if(visible){
+      // Minimal Minecraft-style crosshair only; no second character or fake landscape.
+      ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.globalAlpha=.85;
+      ctx.beginPath();ctx.moveTo(w/2-7,h/2);ctx.lineTo(w/2-2,h/2);ctx.moveTo(w/2+2,h/2);ctx.lineTo(w/2+7,h/2);ctx.moveTo(w/2,h/2-7);ctx.lineTo(w/2,h/2-2);ctx.moveTo(w/2,h/2+2);ctx.lineTo(w/2,h/2+7);ctx.stroke();ctx.globalAlpha=1;
+      drawHand(w,h);
+      phase+=.08+movement*.012;swing+=.12;
+      movement*=.94;
     }
-    // A small floating block crosshair, and a Minecraft-style player in front.
-    const cx=w*.5, feet=h*.77, scale=Math.max(.65,Math.min(1.2,h/700));
-    drawSteve(cx,feet,scale);
-    // Pixel crosshair, kept subtle
-    ctx.strokeStyle='#ffffffcc';ctx.lineWidth=2;
-    ctx.strokeRect(cx-7,h*.49-7,14,14);
-    ctx.fillStyle='#ffffffaa';ctx.fillRect(cx-1,h*.49-1,2,2);
-    // Local placed-block previews float in a short row above hotbar.
-    placed.forEach((b,i)=>cube(w/2-((placed.length-1)*18)/2+i*18,h*.66,7,b));
-    tick++;swing+=.12;
     requestAnimationFrame(draw);
   }
-  hud.querySelectorAll('button').forEach(btn=>btn.addEventListener('click',()=>{
-    hud.querySelectorAll('button').forEach(b=>b.classList.remove('active'));
-    btn.classList.add('active');selected=btn.dataset.kind;
-    if(selected!=='sword') { if(placed.length<8) placed.push(selected); }
-  }));
+  window.addEventListener('pointermove',e=>{
+    mx=e.clientX-innerWidth/2;my=e.clientY-innerHeight/2;
+    const dx=e.clientX-lastX,dy=e.clientY-lastY;
+    movement=Math.min(7,movement+Math.min(2,Math.hypot(dx,dy)*.04));
+    lastX=e.clientX;lastY=e.clientY;
+  },{passive:true});
   window.addEventListener('keydown',e=>{
-    if(e.key==='F2'){visible=!visible;layer.style.display=visible?'block':'none';hud.style.display=visible?'flex':'none';tag.style.display=visible?'block':'none';help.style.display=visible?'block':'none';}
-    if(e.key==='Escape'){visible=false;layer.style.display='none';hud.style.display='none';tag.style.display='none';help.style.display='none';}
+    if(/^[1-5]$/.test(e.key))select(Number(e.key)-1);
+    if(e.key.toLowerCase()==='e'&&!e.repeat){inventoryOpen=!inventoryOpen;inv.style.display=inventoryOpen?'block':'none';}
+    if(e.key==='Escape'&&inventoryOpen){inventoryOpen=false;inv.style.display='none';}
+    if(e.key==='F2'){visible=!visible;canvas.style.display=visible?'block':'none';label.style.display=visible?'block':'none';hotbar.style.display=visible?'flex':'none';if(!visible){inventoryOpen=false;inv.style.display='none';}}
   });
   window.addEventListener('resize',resize);
   resize();draw();
-
-  const gameCanvas=document.querySelector('#unity-canvas')||document.querySelector('canvas');
-  help.textContent=gameCanvas
-    ? 'CAPA SOBRE EL JUEGO · no modifica la escena Unity'
-    : 'Esperando canvas de Veck.io · F2 para ocultar';
-  console.info('[VeckCraft] Capa visual cargada. Solo dibujo local; no altera el mundo ni el multijugador.');
+  console.info('[VeckCraft FP] Primera persona: mano pixelada, bobbing, hotbar e inventario. Capa visual local; aún no reemplaza armas/modelos de Unity ni cambia el servidor.');
 })();
