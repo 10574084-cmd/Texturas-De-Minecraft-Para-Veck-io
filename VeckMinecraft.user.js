@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Veck.io Minecraft Visual Prototype
+// @name         VeckCraft - Minecraft visual layer
 // @namespace    https://github.com/10574084-cmd/Texturas-De-Minecraft-Para-Veck-io
-// @version      0.1.0
-// @description  Prototipo visual estilo Minecraft para Veck.io: Steve voxel, bloques y hotbar local.
+// @version      0.2.0
+// @description  Capa visual Minecraft a pantalla completa para Veck.io (prototipo local).
 // @match        https://veck.io/*
 // @match        https://www.veck.io/*
 // @run-at       document-idle
@@ -11,157 +11,139 @@
 
 (() => {
   'use strict';
-  if (window.__veckMinecraftPrototype) return;
-  window.__veckMinecraftPrototype = true;
+  if (window.__veckCraftLayer) return;
+  window.__veckCraftLayer = true;
 
-  const style = document.createElement('style');
-  style.textContent = `
-    #vmc-panel{position:fixed;right:14px;top:14px;z-index:2147483646;width:265px;color:#fff;background:#171717f2;border:2px solid #6b9b45;box-shadow:0 5px 22px #0009;font:13px monospace;border-radius:5px;overflow:hidden}
-    #vmc-head{padding:9px 10px;background:#426b2c;display:flex;justify-content:space-between;align-items:center;font-weight:bold;cursor:move}
-    #vmc-body{padding:10px}.vmc-row{display:flex;gap:6px;margin:7px 0}.vmc-btn{font:12px monospace;color:white;background:#383838;border:1px solid #888;padding:7px 8px;cursor:pointer;flex:1}.vmc-btn:hover{background:#4c7134}
-    #vmc-preview{width:100%;height:190px;display:block;background:linear-gradient(#7fb8e6 0 66%,#5c8d3c 66%);image-rendering:pixelated;border:1px solid #666}
-    #vmc-hotbar{display:flex;gap:4px;justify-content:center;margin-top:8px}.vmc-slot{width:42px;height:42px;border:2px solid #777;background:#292929;display:grid;place-items:center;font-size:20px}.vmc-slot.active{border-color:#fff;outline:1px solid #fff}
-    #vmc-status{color:#d8e9c8;font-size:11px;line-height:1.45;margin-top:8px}.vmc-note{font-size:10px;color:#bbb;line-height:1.4;margin-top:8px}
-    #vmc-toggle{position:fixed;right:14px;top:14px;z-index:2147483646;background:#426b2c;color:#fff;border:1px solid #b5d59b;padding:8px;font:12px monospace;cursor:pointer}
+  const css = document.createElement('style');
+  css.textContent = `
+    #veckcraft-layer{position:fixed;inset:0;width:100vw;height:100vh;z-index:2147483000;pointer-events:none;image-rendering:pixelated}
+    #veckcraft-hud{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:2147483001;display:flex;gap:5px;padding:6px;background:#1717179e;border:2px solid #ddd;pointer-events:auto}
+    .veckcraft-slot{width:43px;height:43px;box-sizing:border-box;background:#555b;color:white;border:2px solid #aaa;font:22px monospace;display:grid;place-items:center;text-shadow:1px 2px #222;cursor:pointer}
+    .veckcraft-slot.active{border:3px solid white;background:#8b8b8b}
+    #veckcraft-tag{position:fixed;top:10px;left:10px;z-index:2147483001;color:white;background:#1119;border:1px solid #aaa;padding:5px 8px;font:12px monospace;pointer-events:none}
+    #veckcraft-help{position:fixed;top:10px;right:10px;z-index:2147483001;color:#fff;background:#111b;padding:7px 9px;font:11px monospace;pointer-events:auto}
   `;
-  document.documentElement.appendChild(style);
+  document.documentElement.appendChild(css);
 
-  const panel = document.createElement('div');
-  panel.id = 'vmc-panel';
-  panel.innerHTML = `
-    <div id="vmc-head"><span>⛏ VECKCRAFT · PROTOTIPO</span><button id="vmc-close" class="vmc-btn" style="flex:0;padding:3px 7px">—</button></div>
-    <div id="vmc-body">
-      <canvas id="vmc-preview" width="265" height="190" aria-label="Vista previa voxel"></canvas>
-      <div class="vmc-row"><button class="vmc-btn" id="vmc-add">+ Añadir bloque</button><button class="vmc-btn" id="vmc-remove">− Quitar bloque</button></div>
-      <div id="vmc-hotbar">
-        <button class="vmc-slot active" data-block="grass" title="Césped">🟩</button>
-        <button class="vmc-slot" data-block="dirt" title="Tierra">🟫</button>
-        <button class="vmc-slot" data-block="stone" title="Piedra">⬜</button>
-        <button class="vmc-slot" data-block="wood" title="Madera">🟧</button>
-        <button class="vmc-slot" data-block="brick" title="Ladrillo">🟥</button>
-      </div>
-      <div id="vmc-status">Iniciando diagnóstico de Unity…</div>
-      <div class="vmc-note">Vista local de prueba: los bloques y Steve todavía no existen en el mundo real de Veck.io ni se sincronizan con otros jugadores.</div>
-    </div>`;
-  document.body.appendChild(panel);
+  const layer = document.createElement('canvas');
+  layer.id = 'veckcraft-layer';
+  layer.setAttribute('aria-label','Capa visual Minecraft');
+  document.body.appendChild(layer);
+  const ctx = layer.getContext('2d');
+  const tag = document.createElement('div');
+  tag.id='veckcraft-tag';
+  tag.textContent='VECKCRAFT VISUAL 0.2 · F2 oculta/mostrar';
+  document.body.appendChild(tag);
 
-  const toggle = document.createElement('button');
-  toggle.id = 'vmc-toggle';
-  toggle.textContent = '⛏ VeckCraft';
-  toggle.style.display = 'none';
-  document.body.appendChild(toggle);
+  const help = document.createElement('div');
+  help.id='veckcraft-help';
+  help.textContent='PROTOTIPO VISUAL · solo local';
+  document.body.appendChild(help);
 
-  const canvas = panel.querySelector('#vmc-preview');
-  const ctx = canvas.getContext('2d');
-  const status = panel.querySelector('#vmc-status');
-  const blocks = [];
-  const colors = {
-    grass: ['#72b64d','#4b8834','#8a603d'],
-    dirt: ['#a4774d','#785033','#5b3c28'],
-    stone: ['#b6b6b6','#858585','#686868'],
-    wood: ['#c39152','#91602f','#68421f'],
-    brick: ['#bd5c4d','#8e3d35','#632a27']
+  const hud = document.createElement('div');
+  hud.id='veckcraft-hud';
+  hud.innerHTML = '<button class="veckcraft-slot active" data-kind="grass" title="Césped">🟩</button><button class="veckcraft-slot" data-kind="dirt" title="Tierra">🟫</button><button class="veckcraft-slot" data-kind="stone" title="Piedra">⬜</button><button class="veckcraft-slot" data-kind="wood" title="Madera">🟫</button><button class="veckcraft-slot" data-kind="sword" title="Espada">⚔️</button>';
+  document.body.appendChild(hud);
+
+  let visible=true, selected='grass', swing=0, tick=0;
+  const palette = {
+    grass:{top:'#76b94b',left:'#795239',right:'#60402b',sideTop:'#4e9638'},
+    dirt:{top:'#996841',left:'#785033',right:'#583a26'},
+    stone:{top:'#b5b5b5',left:'#858585',right:'#626262'},
+    wood:{top:'#c28a4b',left:'#94602f',right:'#69401f'},
+    brick:{top:'#b65a4d',left:'#8d4138',right:'#652b27'}
   };
-  let selected = 'grass';
-  let yaw = 0;
+  const placed = [];
 
-  function polygon(points, fill) {
-    ctx.beginPath(); ctx.moveTo(points[0][0], points[0][1]);
-    for (let i=1;i<points.length;i++) ctx.lineTo(points[i][0], points[i][1]);
-    ctx.closePath(); ctx.fillStyle=fill; ctx.fill();
-    ctx.strokeStyle='#0002'; ctx.stroke();
+  function poly(points, fill, stroke='#17171766') {
+    ctx.beginPath();ctx.moveTo(points[0][0],points[0][1]);
+    for(let i=1;i<points.length;i++)ctx.lineTo(points[i][0],points[i][1]);
+    ctx.closePath();ctx.fillStyle=fill;ctx.fill();
+    if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=1;ctx.stroke();}
   }
-  function cube(x,y,s, palette) {
-    const [top,left,right] = palette;
-    polygon([[x,y],[x+s,y-s*.48],[x+s*2,y],[x+s,y+s*.48]],top);
-    polygon([[x,y],[x+s,y+s*.48],[x+s,y+s*1.48],[x,y+s]],left);
-    polygon([[x+s,y+s*.48],[x+s*2,y],[x+s*2,y+s],[x+s,y+s*1.48]],right);
-    // Pixel flecks for a block-texture feel
-    ctx.fillStyle='#ffffff16';
-    for(let i=0;i<3;i++) ctx.fillRect(x+4+i*8,y+5+(i%2)*5,3,3);
+  function cube(x,y,s,type) {
+    const p=palette[type]||palette.grass;
+    const topY=s*.48;
+    poly([[x,y],[x+s,y-topY],[x+2*s,y],[x+s,y+topY]],p.top);
+    poly([[x,y],[x+s,y+topY],[x+s,y+topY+s],[x,y+s]],p.left);
+    poly([[x+s,y+topY],[x+2*s,y],[x+2*s,y+s],[x+s,y+topY+s]],p.right);
+    // Tiny square pixels
+    ctx.fillStyle='#ffffff20';
+    ctx.fillRect(x+s*.25,y+s*.2,Math.max(2,s*.12),Math.max(2,s*.12));
+    ctx.fillRect(x+s*1.3,y+s*.18,Math.max(2,s*.1),Math.max(2,s*.1));
   }
-  function drawSteve(cx, baseY, scale) {
-    const u=scale, bob=Math.sin(yaw)*2;
-    // Legs
-    ctx.fillStyle='#273d8b'; ctx.fillRect(cx-15*u,baseY-31*u+bob,13*u,31*u); ctx.fillRect(cx+2*u,baseY-31*u-bob,13*u,31*u);
-    // Shoes
-    ctx.fillStyle='#3c342b';ctx.fillRect(cx-16*u,baseY-5*u,14*u,5*u);ctx.fillRect(cx+1*u,baseY-5*u,14*u,5*u);
-    // Body
-    ctx.fillStyle='#2878a7';ctx.fillRect(cx-17*u,baseY-64*u,34*u,34*u);
-    // Arms
-    ctx.fillStyle='#c98b61';ctx.fillRect(cx-25*u,baseY-63*u,8*u,32*u);ctx.fillRect(cx+17*u,baseY-63*u,8*u,32*u);
-    // Head
-    ctx.fillStyle='#c98b61';ctx.fillRect(cx-16*u,baseY-88*u,32*u,25*u);
-    // Hair
-    ctx.fillStyle='#563b25';ctx.fillRect(cx-16*u,baseY-91*u,32*u,8*u);ctx.fillRect(cx-16*u,baseY-83*u,5*u,8*u);ctx.fillRect(cx+11*u,baseY-83*u,5*u,6*u);
-    // Face, eyes and nose
-    ctx.fillStyle='#fff';ctx.fillRect(cx-10*u,baseY-81*u,6*u,4*u);ctx.fillRect(cx+4*u,baseY-81*u,6*u,4*u);
-    ctx.fillStyle='#3156a2';ctx.fillRect(cx-8*u,baseY-80*u,3*u,3*u);ctx.fillRect(cx+6*u,baseY-80*u,3*u,3*u);
-    ctx.fillStyle='#81513d';ctx.fillRect(cx-3*u,baseY-76*u,6*u,7*u);
-    // Pixel-grid seams
-    ctx.strokeStyle='#0002';ctx.lineWidth=1;ctx.strokeRect(cx-17*u,baseY-64*u,34*u,34*u);
-  }
-  function render() {
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    // Pixelated clouds and distant hills
-    ctx.fillStyle='#ffffffaa';ctx.fillRect(22,24,38,9);ctx.fillRect(33,16,20,8);ctx.fillRect(176,35,45,9);ctx.fillRect(188,27,19,8);
-    polygon([[0,128],[48,87],[88,119],[140,76],[205,116],[265,91],[265,190],[0,190]],'#63944b');
-    polygon([[0,151],[57,132],[102,155],[171,126],[228,153],[265,140],[265,190],[0,190]],'#4d7a38');
-    for(let i=blocks.length-1;i>=0;i--) {
-      const b=blocks[i]; cube(130+b.x*18,148-b.z*14-b.x*7,15,colors[b.type]||colors.grass);
+  function drawSteve(x, feet, u) {
+    const bob=Math.sin(tick*.07)*u*1.3;
+    // legs and shoes
+    ctx.fillStyle='#273c83';ctx.fillRect(x-13*u,feet-31*u+bob,12*u,30*u);ctx.fillRect(x+1*u,feet-31*u-bob,12*u,30*u);
+    ctx.fillStyle='#3d342c';ctx.fillRect(x-14*u,feet-4*u,13*u,4*u);ctx.fillRect(x+u,feet-4*u,13*u,4*u);
+    // arms
+    ctx.fillStyle='#c99068';ctx.fillRect(x-22*u,feet-62*u,8*u,29*u);ctx.fillRect(x+14*u,feet-62*u,8*u,29*u);
+    // turquoise shirt/body
+    ctx.fillStyle='#247ca6';ctx.fillRect(x-14*u,feet-63*u,28*u,32*u);
+    // block head and hair
+    ctx.fillStyle='#c99068';ctx.fillRect(x-13*u,feet-85*u,26*u,23*u);
+    ctx.fillStyle='#573b25';ctx.fillRect(x-13*u,feet-88*u,26*u,7*u);ctx.fillRect(x-13*u,feet-81*u,4*u,8*u);ctx.fillRect(x+9*u,feet-81*u,4*u,6*u);
+    ctx.fillStyle='#f5f5f5';ctx.fillRect(x-9*u,feet-78*u,5*u,4*u);ctx.fillRect(x+4*u,feet-78*u,5*u,4*u);
+    ctx.fillStyle='#2e56a5';ctx.fillRect(x-7*u,feet-77*u,2.5*u,3*u);ctx.fillRect(x+6*u,feet-77*u,2.5*u,3*u);
+    ctx.fillStyle='#81503a';ctx.fillRect(x-2*u,feet-73*u,4*u,6*u);
+    // sword selected: held in right hand, purely visual
+    if(selected==='sword') {
+      ctx.save();ctx.translate(x+22*u,feet-47*u);ctx.rotate(-.6+Math.sin(swing)*.07);
+      ctx.fillStyle='#a66c3b';ctx.fillRect(-2*u,0,4*u,13*u);
+      ctx.fillStyle='#d5e5e8';ctx.fillRect(-3*u,-20*u,6*u,22*u);
+      ctx.fillStyle='#f6ffff';ctx.fillRect(-1*u,-19*u,2*u,17*u);
+      ctx.fillStyle='#8b6039';ctx.fillRect(-7*u,-2*u,14*u,3*u);
+      ctx.restore();
     }
-    drawSteve(132,165,0.78);
-    ctx.fillStyle='#0008';ctx.fillRect(7,7,92,16);ctx.fillStyle='#fff';ctx.font='10px monospace';ctx.fillText('STEVE · VISUAL',12,18);
-    yaw += 0.045;
-    requestAnimationFrame(render);
   }
-  render();
-
-  panel.querySelectorAll('.vmc-slot').forEach(btn => btn.addEventListener('click', () => {
-    panel.querySelectorAll('.vmc-slot').forEach(b=>b.classList.remove('active'));
-    btn.classList.add('active'); selected=btn.dataset.block;
+  function resize(){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    layer.width=Math.floor(innerWidth*dpr);layer.height=Math.floor(innerHeight*dpr);
+    layer.style.width=innerWidth+'px';layer.style.height=innerHeight+'px';
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  function draw(){
+    if(!visible){requestAnimationFrame(draw);return;}
+    const w=innerWidth,h=innerHeight;
+    ctx.clearRect(0,0,w,h);
+    // Perspective block path painted over the game view.
+    const horizon=h*.61;
+    for(let row=3;row>=0;row--){
+      for(let col=-3;col<=3;col++){
+        const s=Math.max(5,7+row*3);
+        const x=w/2+col*s*1.65-row*2;
+        const y=horizon+row*s*.85+Math.abs(col)*s*.16;
+        if(y<h-80) cube(x,y,s, row===0?'grass':(row%2?'dirt':'grass'));
+      }
+    }
+    // A small floating block crosshair, and a Minecraft-style player in front.
+    const cx=w*.5, feet=h*.77, scale=Math.max(.65,Math.min(1.2,h/700));
+    drawSteve(cx,feet,scale);
+    // Pixel crosshair, kept subtle
+    ctx.strokeStyle='#ffffffcc';ctx.lineWidth=2;
+    ctx.strokeRect(cx-7,h*.49-7,14,14);
+    ctx.fillStyle='#ffffffaa';ctx.fillRect(cx-1,h*.49-1,2,2);
+    // Local placed-block previews float in a short row above hotbar.
+    placed.forEach((b,i)=>cube(w/2-((placed.length-1)*18)/2+i*18,h*.66,7,b));
+    tick++;swing+=.12;
+    requestAnimationFrame(draw);
+  }
+  hud.querySelectorAll('button').forEach(btn=>btn.addEventListener('click',()=>{
+    hud.querySelectorAll('button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');selected=btn.dataset.kind;
+    if(selected!=='sword') { if(placed.length<8) placed.push(selected); }
   }));
-  panel.querySelector('#vmc-add').addEventListener('click', () => {
-    if(blocks.length >= 16) { status.textContent='Límite de 16 bloques de prueba alcanzado.'; return; }
-    blocks.push({type:selected,x:(blocks.length%5)-2,z:Math.floor(blocks.length/5)});
-    status.textContent='Bloque local añadido ('+blocks.length+'/16). No afecta al servidor.';
+  window.addEventListener('keydown',e=>{
+    if(e.key==='F2'){visible=!visible;layer.style.display=visible?'block':'none';hud.style.display=visible?'flex':'none';tag.style.display=visible?'block':'none';help.style.display=visible?'block':'none';}
+    if(e.key==='Escape'){visible=false;layer.style.display='none';hud.style.display='none';tag.style.display='none';help.style.display='none';}
   });
-  panel.querySelector('#vmc-remove').addEventListener('click', () => {
-    if(blocks.length) blocks.pop();
-    status.textContent='Bloques locales: '+blocks.length+'. No se ha cambiado el mundo real.';
-  });
-  panel.querySelector('#vmc-close').addEventListener('click', () => { panel.style.display='none';toggle.style.display='block'; });
-  toggle.addEventListener('click', () => { panel.style.display='block';toggle.style.display='none'; });
+  window.addEventListener('resize',resize);
+  resize();draw();
 
-  // Make the panel draggable by its title bar.
-  const head = panel.querySelector('#vmc-head');
-  let drag = null;
-  head.addEventListener('pointerdown', e => {
-    if(e.target.closest('button')) return;
-    const r=panel.getBoundingClientRect();drag={x:e.clientX-r.left,y:e.clientY-r.top};head.setPointerCapture(e.pointerId);
-  });
-  head.addEventListener('pointermove', e => {
-    if(!drag) return;
-    panel.style.left=Math.max(0,e.clientX-drag.x)+'px';
-    panel.style.top=Math.max(0,e.clientY-drag.y)+'px';
-    panel.style.right='auto';
-  });
-  head.addEventListener('pointerup',()=>drag=null);
-  head.addEventListener('pointercancel',()=>drag=null);
-
-  function inspectUnity() {
-    const instance = window.unityInstance;
-    if(instance && typeof instance.SendMessage === 'function') {
-      status.textContent='Unity detectado: SendMessage disponible. Aún falta identificar los objetos y métodos internos del juego.';
-      return;
-    }
-    const c=document.querySelector('#unity-canvas') || document.querySelector('canvas');
-    status.textContent = c
-      ? 'Canvas Unity/WebGL detectado, pero no hay puente de objetos público. Prototipo visual activo.'
-      : 'Esperando el canvas del juego…';
-  }
-  inspectUnity();
-  setTimeout(inspectUnity,1500);
-  setTimeout(inspectUnity,5000);
-  console.info('[VeckCraft] Prototipo visual cargado. Esto no modifica la física ni el multijugador.');
+  const gameCanvas=document.querySelector('#unity-canvas')||document.querySelector('canvas');
+  help.textContent=gameCanvas
+    ? 'CAPA SOBRE EL JUEGO · no modifica la escena Unity'
+    : 'Esperando canvas de Veck.io · F2 para ocultar';
+  console.info('[VeckCraft] Capa visual cargada. Solo dibujo local; no altera el mundo ni el multijugador.');
 })();
